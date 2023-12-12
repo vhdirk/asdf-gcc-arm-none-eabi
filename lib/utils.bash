@@ -24,16 +24,10 @@ sort_versions() {
 		LC_ALL=C sort -t. -k 1,1 -k 2,2n -k 3,3n -k 4,4n -k 5,5n | awk '{print $2}'
 }
 
-list_github_tags() {
-	git ls-remote --tags --refs "$GH_REPO" |
-		grep -o 'refs/tags/.*' | cut -d/ -f3- |
-		sed 's/^v//' # NOTE: You might want to adapt this sed to remove non-version strings from tags
-}
-
 list_all_versions() {
-	# TODO: Adapt this. By default we simply list the tag names from GitHub releases.
-	# Change this function if gcc-arm-none-eabi has other means of determining installable versions.
-	list_github_tags
+
+	echo "8-2018q4"
+
 }
 
 download_release() {
@@ -41,8 +35,8 @@ download_release() {
 	version="$1"
 	filename="$2"
 
-	# TODO: Adapt the release URL convention for gcc-arm-none-eabi
-	url="$GH_REPO/archive/v${version}.tar.gz"
+
+	url=https://developer.arm.com/-/media/Files/downloads/gnu-rm/${version}/gcc-arm-none-eabi-${version}-major-linux.tar.bz2
 
 	echo "* Downloading $TOOL_NAME release $version..."
 	curl "${curl_opts[@]}" -o "$filename" -C - "$url" || fail "Could not download $url"
