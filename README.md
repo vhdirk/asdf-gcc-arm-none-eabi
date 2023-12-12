@@ -3,7 +3,6 @@
 # asdf-gcc-arm-none-eabi [![Build](https://github.com/vhdirk/asdf-gcc-arm-none-eabi/actions/workflows/build.yml/badge.svg)](https://github.com/vhdirk/asdf-gcc-arm-none-eabi/actions/workflows/build.yml) [![Lint](https://github.com/vhdirk/asdf-gcc-arm-none-eabi/actions/workflows/lint.yml/badge.svg)](https://github.com/vhdirk/asdf-gcc-arm-none-eabi/actions/workflows/lint.yml)
 
 [gcc-arm-none-eabi](https://developer.arm.com/Tools%20and%20Software/GNU%20Toolchain) plugin for the [asdf version manager](https://asdf-vm.com).
-
 </div>
 
 # Contents
@@ -15,10 +14,8 @@
 
 # Dependencies
 
-**TODO: adapt this section**
-
+- An x86_64 Linux system
 - `bash`, `curl`, `tar`, and [POSIX utilities](https://pubs.opengroup.org/onlinepubs/9699919799/idx/utilities.html).
-- `SOME_ENV_VAR`: set this environment variable in your shell config to load the correct version of tool x.
 
 # Install
 
