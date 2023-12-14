@@ -5,29 +5,75 @@ set -euo pipefail
 TOOL_NAME="gcc-arm-none-eabi"
 TOOL_TEST="arm-none-eabi-c++ --version"
 
-declare -A VERSIONS
+BASE_URL="https://developer.arm.com"
+URL="$BASE_URL/downloads/-/arm-gnu-toolchain-downloads"
+LEGACY_URL="$BASE_URL/downloads/-/gnu-rm"
 
-VERSIONS["13.2-rel1"]="https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["12.3-rel1"]="https://developer.arm.com/-/media/Files/downloads/gnu/12.3.rel1/binrel/arm-gnu-toolchain-12.3.rel1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["12.2-mpacbti-rel1"]="https://developer.arm.com/-/media/Files/downloads/gnu/12.2.mpacbti-rel1/binrel/arm-gnu-toolchain-12.2.mpacbti-rel1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["12.2-rel1"]="https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["12.2-mpacbti-bet1"]="https://developer.arm.com/-/media/Files/downloads/gnu/12.2.mpacbti-bet1/binrel/arm-gnu-toolchain-12.2.mpacbti-bet1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["11.3-rel1"]="https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["11.2-2022.02"]="https://developer.arm.com/-/media/Files/downloads/gnu/11.2-2022.02/binrel/gcc-arm-11.2-2022.02-x86_64-arm-none-eabi.tar.xz"
-VERSIONS["10.3-2021.10"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2"
-VERSIONS["10.3-2021.07"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/10.3-2021.07/gcc-arm-none-eabi-10.3-2021.07-x86_64-linux.tar.bz2"
-VERSIONS["10-2020.q4"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/10-2020q4/gcc-arm-none-eabi-10-2020-q4-major-x86_64-linux.tar.bz2"
-VERSIONS["10-2020.q2"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/10-2020q2/gcc-arm-none-eabi-10-2020-q2-preview-x86_64-linux.tar.bz2"
-VERSIONS["9-2020.q2"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/9-2020q2/gcc-arm-none-eabi-9-2020-q2-update-x86_64-linux.tar.bz2"
-VERSIONS["9-2019.q4"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/9-2019q4/gcc-arm-none-eabi-9-2019-q4-major-x86_64-linux.tar.bz2"
-VERSIONS["8-2019.q3"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/8-2019q3/RC1.1/gcc-arm-none-eabi-8-2019-q3-update-linux.tar.bz2"
-VERSIONS["8-2018.q4"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/8-2018q4/gcc-arm-none-eabi-8-2018-q4-major-linux.tar.bz2"
-VERSIONS["7-2018.q2"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/7-2018q2/gcc-arm-none-eabi-7-2018-q2-update-linux.tar.bz2"
-VERSIONS["7-2017.q4"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/7-2017q4/gcc-arm-none-eabi-7-2017-q4-major-linux.tar.bz2"
-VERSIONS["6-2017.q2"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2017q2/gcc-arm-none-eabi-6-2017-q2-update-linux.tar.bz2"
-VERSIONS["6.1-2017.q1"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/6_1-2017q1/gcc-arm-none-eabi-6-2017-q1-update-linux.tar.bz2"
-VERSIONS["6-2016.q4"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/6-2016q4/gcc-arm-none-eabi-6_2-2016q4-20161216-linux.tar.bz2"
-VERSIONS["5.4-2016.q3"]="https://developer.arm.com/-/media/Files/downloads/gnu-rm/5_4-2016q3/gcc-arm-none-eabi-5_4-2016q3-20160926-linux.tar.bz2"
+get_version() {
+	local link=$1
+
+	local part
+	# we know of 3 different link structures
+	if grep -q 'arm-gnu-toolchain' <<<"$link"; then
+		part=$(echo "$link" | awk -F'arm-gnu-toolchain-' '{print $2}' | awk -F '?' '{print $1}')
+	elif grep -q 'gcc-arm-none-eabi' <<<"$link"; then
+		part=$(echo "$link" | awk -F'gcc-arm-none-eabi-' '{print $2}')
+	else
+		part=$(echo "$link" | awk -F'gcc-arm-' '{print $2}')
+	fi
+
+	local version_part
+	version_part=$(echo "$part" | sed 's/\.tar\.\(xz\|bz2\)\|\.zip$//' | sed 's/-arm-none-eabi//')
+
+	# cut of the platform/architecture
+	echo "$version_part" | sed -E 's/-(x86_64|mingw|darwin|linux|win32|mac|aarch64).*$//'
+
+}
+
+get_links() {
+	local content
+	local arch
+	local kernel
+	local links
+	content=$1
+
+	# Get the system architecture and kernel
+	arch=$(uname -m | tr '[:upper:]' '[:lower:]')
+	kernel=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+	# Fetch the content of the URL and extract links
+	links=$(echo "$content" | awk -F 'href="' '/<a/{gsub(/".*/, "", $2); print $2}' | grep -v "srcrel" | awk '!/-src./' | grep -E 'arm-none-eabi.*\.(tar.xz|tar.bz2|zip)\?' | awk -F '?' '{print $1}')
+
+	declare -A versions
+
+	while IFS= read -r link; do
+
+		local version
+		version=$(get_version "$link")
+
+		# filter mac links on mac
+		if [[ $kernel == "darwin" && "$link" =~ (darwin|mac) ]]; then
+
+			if [[ $link =~ $arch ]]; then
+				versions["$version"]=$BASE_URL$link
+				continue
+			elif [[ "$arch" == "arm64" && ! -v versions["$version"] ]]; then
+				# The archs do not match. If we're on arm64, x86_64 is also usable
+				# first test if there already is a matching link, if not, fill it in
+				versions["$version"]=$BASE_URL$link
+			fi
+			# if nothing matches, nothing matches :)
+		elif [[ $kernel == "linux" && ! "$link" =~ (mingw|darwin|win32|mac) ]]; then
+			if [[ "$link" =~ $arch ]]; then
+				versions[$version]=$BASE_URL$link
+			elif [[ $arch == "x86_64" && ! "$link" =~ "aarch64" ]]; then
+				versions[$version]=$BASE_URL$link
+			fi
+		fi
+	done <<<"$links"
+
+	declare -p versions
+}
 
 fail() {
 	echo -e "asdf-$TOOL_NAME: $*"
@@ -37,18 +83,29 @@ fail() {
 curl_opts=(-fsSL)
 
 sort_versions() {
-	sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' |
-		LC_ALL=C sort -t. -k 1,1 -k 2,2n -k 3,3n -k 4,4n -k 5,5n | awk '{print $2}'
+	sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' | LC_ALL=C sort -Vr | awk '{print $2}'
 }
 
 list_all_versions() {
-	printf "%s\n" "${!VERSIONS[@]}"
+	local content
+	content="$(curl -s "$URL")$(curl -s "$LEGACY_URL")"
+	local result
+	result=$(get_links "$content")
+	eval "$result"
+
+	printf "%s\n" "${!versions[@]}"
 }
 
 release_filename() {
+	local content
+	content="$(curl -s "$URL")$(curl -s "$LEGACY_URL")"
+	local result
+	result=$(get_links "$content")
+	eval "$result"
+
 	local version
 	version="$1"
-	basename "${VERSIONS[$version]}"
+	basename "${versions["$version"]}"
 }
 
 download_release() {
@@ -56,14 +113,20 @@ download_release() {
 	version="$1"
 	filename="$2"
 
-	url=${VERSIONS[$version]}
+	local content
+	content="$(curl -s "$URL")$(curl -s "$LEGACY_URL")"
+	local result
+	result=$(get_links "$content")
+	eval "$result"
+
+	url=${versions["$version"]}
 
 	echo "* Downloading $TOOL_NAME release $version..."
 	curl "${curl_opts[@]}" -o "$filename" -C - "$url" || fail "Could not download $url"
 }
 
 latest_release() {
-	echo "13.2-rel1"
+	list_all_versions | sort_versions | head -n1 | xargs echo
 }
 
 install_version() {
@@ -74,7 +137,6 @@ install_version() {
 	if [ "$install_type" != "version" ]; then
 		fail "asdf-$TOOL_NAME supports release installs only"
 	fi
-
 	(
 		mkdir -p "$install_path"
 
