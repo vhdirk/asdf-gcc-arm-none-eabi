@@ -3,11 +3,15 @@
 set -euo pipefail
 
 TOOL_NAME="gcc-arm-none-eabi"
-TOOL_TEST="arm-none-eabi-c++ --version"
+TOOL_TEST="arm-none-eabi-gcc --version"
 
 BASE_URL="https://developer.arm.com"
 URL="$BASE_URL/downloads/-/arm-gnu-toolchain-downloads"
 LEGACY_URL="$BASE_URL/downloads/-/gnu-rm"
+
+[ "${BASH_VERSINFO:-0}" -lt 4 ] && fail "requires bash v4 or higher"
+
+curl_opts=(--progress-bar -fSL)
 
 get_version() {
 	local link=$1
@@ -33,13 +37,11 @@ get_version() {
 get_links() {
 	local content
 	local arch
-	local kernel
 	local links
 	content=$1
 
-	# Get the system architecture and kernel
+	# Get the system architecture
 	arch=$(uname -m | tr '[:upper:]' '[:lower:]')
-	kernel=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 	# Fetch the content of the URL and extract links
 	links=$(echo "$content" | awk -F 'href="' '/<a/{gsub(/".*/, "", $2); print $2}' | grep -v "srcrel" | awk '!/-src./' | grep -E 'arm-none-eabi.*\.(tar.xz|tar.bz2|zip)\?' | awk -F '?' '{print $1}')
@@ -51,19 +53,19 @@ get_links() {
 		local version
 		version=$(get_version "$link")
 
-		# filter mac links on mac
-		if [[ $kernel == "darwin" && "$link" =~ (darwin|mac) ]]; then
-
+		if [[ "$OSTYPE" =~ darwin* && "$link" =~ (darwin|mac) ]]; then
+			# filter mac links on mac
 			if [[ $link =~ $arch ]]; then
 				versions["$version"]=$BASE_URL$link
-				continue
 			elif [[ "$arch" == "arm64" && ! -v versions["$version"] ]]; then
 				# The archs do not match. If we're on arm64, x86_64 is also usable
 				# first test if there already is a matching link, if not, fill it in
 				versions["$version"]=$BASE_URL$link
 			fi
+		elif [[ "$OSTYPE" =~ (cygwin|msys) && "$link" =~ (mingw|win32) ]]; then
+			versions["$version"]=$BASE_URL$link
+		elif [[ "$OSTYPE" =~ linux-gnu && ! "$link" =~ (mingw|darwin|win32|mac) ]]; then
 			# if nothing matches, nothing matches :)
-		elif [[ $kernel == "linux" && ! "$link" =~ (mingw|darwin|win32|mac) ]]; then
 			if [[ "$link" =~ $arch ]]; then
 				versions[$version]=$BASE_URL$link
 			elif [[ $arch == "x86_64" && ! "$link" =~ "aarch64" ]]; then
@@ -80,10 +82,8 @@ fail() {
 	exit 1
 }
 
-curl_opts=(-fsSL)
-
 sort_versions() {
-	sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' | LC_ALL=C sort -Vr | awk '{print $2}'
+	sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' | LC_ALL=C sort -V | awk '{print $2}'
 }
 
 list_all_versions() {
@@ -126,7 +126,7 @@ download_release() {
 }
 
 latest_release() {
-	list_all_versions | sort_versions | head -n1 | xargs echo
+	list_all_versions | sort_versions | tail -n1 | xargs echo
 }
 
 install_version() {

@@ -39,7 +39,7 @@ asdf install gcc-arm-none-eabi latest
 asdf global gcc-arm-none-eabi latest
 
 # Now gcc-arm-none-eabi commands are available
-arm-none-eabi-c++ --version
+arm-none-eabi-gcc --version
 ```
 
 Check [asdf](https://github.com/asdf-vm/asdf) readme for more instructions on how to
